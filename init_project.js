@@ -17,10 +17,10 @@ try {
   process.exit(1);
 }
 
-const { projectName, port, host } = config;
+const { projectName, port, host, githubUsername } = config;
 
-if (!projectName || !port || !host) {
-  console.error('Invalid configuration. Please provide projectName, port, and host.');
+if (!projectName || !port || !host || !githubUsername) {
+  console.error('Invalid configuration. Please provide projectName, port, host, and githubUsername.');
   process.exit(1);
 }
 
@@ -117,16 +117,98 @@ const indexHtmlContent = `<!DOCTYPE html>
 </html>`;
 fs.writeFileSync('index.html', indexHtmlContent);
 
-// Step 10: Update package.json to set up the Vite server configuration
+// Step 10: Create vite.config.js with the base URL
+console.log('Creating vite.config.js...');
+const viteConfigContent = `import { defineConfig } from 'vite';
+
+export default defineConfig({
+  base: '/',
+  server: {
+    host: '${host}',
+    port: ${port},
+  },
+  build: {
+    outDir: 'dist'
+  }
+});`;
+fs.writeFileSync('vite.config.js', viteConfigContent);
+
+// Step 11: Update package.json to set up the Vite server configuration
 console.log('Configuring Vite server...');
 const packageJsonPath = path.join(process.cwd(), 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 packageJson.scripts.dev = `vite --host ${host} --port ${port}`;
+packageJson.scripts.build = 'vite build';
+packageJson.scripts.deploy = 'gh-pages -d dist';
+packageJson.homepage = `https://${githubUsername}.github.io/`;
 fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
+
+// Step 12: Install gh-pages
+console.log('Installing gh-pages...');
+runCommand('npm install gh-pages --save-dev', 'Failed to install gh-pages.');
+
+// Step 13: Create GitHub Actions workflow for deployment
+console.log('Creating GitHub Actions workflow...');
+const workflowDir = path.join(process.cwd(), '.github', 'workflows');
+fs.mkdirSync(workflowDir, { recursive: true });
+const workflowContent = `# Simple workflow for deploying static content to GitHub Pages
+name: Deploy static content to Pages
+
+on:
+  # Runs on pushes targeting the default branch
+  push:
+    branches: ['main']
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets the GITHUB_TOKEN permissions to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  # Single deploy job since we're just deploying
+  deploy:
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload dist folder
+          path: './dist'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+`;
+fs.writeFileSync(path.join(workflowDir, 'deploy.yml'), workflowContent);
 
 console.log('Project setup completed successfully.');
 console.log('Next steps:');
 console.log(`1. Navigate to the project directory: cd ${projectName}`);
 console.log('2. Start the development server: npm run dev');
-console.log('3. Open the project in your browser and start developing!');
-
+console.log('3. Build the project for production: npm run build');
+console.log('4. Deploy the project to GitHub Pages: npm run deploy');
+console.log('5. Open the project in your browser and start developing!');

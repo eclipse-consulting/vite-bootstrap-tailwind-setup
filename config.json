@@ -1,6 +1,6 @@
 {
   "projectName": "my-project",
-  "port": 5173,
-  "host": "localhost"
+  "port": 8080,
+  "host": "192.168.193.53",
+  "githubUsername": "eclipse-consulting"
 }
-
